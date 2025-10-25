@@ -1,5 +1,5 @@
 name = "bpm-rules-worker"
-main = "src/worker.ts"
+main = "src/index.ts"
 compatibility_date = "2025-10-25"
 
 [vars]
