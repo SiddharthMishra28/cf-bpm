@@ -5,5 +5,3 @@ export default {
     });
   }
 };
-
-export class BPMWorkflow {}
