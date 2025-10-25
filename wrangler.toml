@@ -1,0 +1,18 @@
+name = "bpm-rules-worker"
+main = "src/worker.ts"
+compatibility_date = "2025-10-25"
+
+[[kv_namespaces]]
+binding = "RULES_CACHE"
+id = "kv_namespace_id_placeholder"
+
+[[d1_databases]]
+binding = "D1"
+database_name = "bpm_rules_db"
+database_id = "d1_database_id_placeholder"
+
+[workflows]
+[[workflows.workflows]]
+name = "bpm-process"
+binding = "BPM_PROCESS"
+class_name = "BPMWorkflow"
