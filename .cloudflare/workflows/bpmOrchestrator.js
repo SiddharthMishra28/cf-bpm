@@ -5,21 +5,18 @@ export async function onRequest(context) {
   const workflowId = data.workflowId;
   const input = data.input || {};
 
-  const getWorkflowRes = await env.BPM_API.fetch(
-    new URL(`/api/workflow/${workflowId}`, env.BPM_API.url)
-  );
+  const getWorkflowRes = await env.BPM_API.fetch(new Request(`https://bpm-rule-api/api/workflow/${workflowId}`));
   const workflow = await getWorkflowRes.json();
 
   const workflowRes = await env.BPM_API.fetch(
-    new URL(`/api/workflow/execute`, env.BPM_API.url),
-    {
+    new Request(`https://bpm-rule-api/api/workflow/execute`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         workflow,
         input
       })
-    }
+    })
   );
 
   const result = await workflowRes.json();

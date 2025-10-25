@@ -89,3 +89,20 @@ export async function insertAuditLog(env: Env, data: {
     data.result_snippet || null
   ).run();
 }
+
+export async function createApiKey(env: Env, name: string, role: string, salt: string, hash: string, createdBy?: string) {
+  const stmt = env.DB.prepare(`INSERT INTO api_keys (name, key_hash, salt, role, created_by) VALUES (?1, ?2, ?3, ?4, ?5)`);
+  await stmt.bind(name, hash, salt, role, createdBy || null).run();
+}
+
+export async function findApiKeyByHash(env: Env, hash: string) {
+  const stmt = env.DB.prepare(`SELECT * FROM api_keys WHERE key_hash = ?1`);
+  const res = await stmt.bind(hash).first();
+  return res || null;
+}
+
+export async function getApiKeyById(env: Env, id: number) {
+  const stmt = env.DB.prepare(`SELECT id, name, role, created_at FROM api_keys WHERE id = ?1`);
+  const res = await stmt.bind(id).first();
+  return res || null;
+}
