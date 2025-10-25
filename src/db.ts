@@ -69,3 +69,23 @@ export async function listWorkflows(env: Env) {
   const res = await stmt.all();
   return res.results || [];
 }
+
+export async function insertAuditLog(env: Env, data: {
+  ruleset_id?: number;
+  execution_id?: number | null;
+  short_hash?: string;
+  payload_snippet?: string;
+  result_snippet?: string;
+}) {
+  const stmt = env.DB.prepare(`
+    INSERT INTO audit_logs (ruleset_id, execution_id, short_hash, payload_snippet, result_snippet)
+    VALUES (?1, ?2, ?3, ?4, ?5)
+  `);
+  await stmt.bind(
+    data.ruleset_id || null,
+    data.execution_id || null,
+    data.short_hash || null,
+    data.payload_snippet || null,
+    data.result_snippet || null
+  ).run();
+}
