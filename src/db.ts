@@ -49,3 +49,23 @@ export async function listExecutions(env: Env) {
   const res = await stmt.all();
   return res.results || [];
 }
+
+export async function insertWorkflow(env: Env, name: string, description: string, stepsJson: any) {
+  const stmt = env.DB.prepare(
+    `INSERT INTO workflows (name, description, steps_json) VALUES (?1, ?2, ?3)`
+  );
+  await stmt.bind(name, description, JSON.stringify(stepsJson)).run();
+}
+
+export async function getWorkflow(env: Env, id: number) {
+  const stmt = env.DB.prepare(`SELECT * FROM workflows WHERE id = ?1`);
+  const wf = await stmt.bind(id).first();
+  if (wf && wf.steps_json) wf.steps_json = JSON.parse(wf.steps_json);
+  return wf;
+}
+
+export async function listWorkflows(env: Env) {
+  const stmt = env.DB.prepare(`SELECT id, name, description, created_at FROM workflows`);
+  const res = await stmt.all();
+  return res.results || [];
+}

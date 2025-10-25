@@ -1,5 +1,5 @@
 import { evaluateRuleset } from "./ruleEngine";
-import { getRuleSet, insertExecution } from "./db";
+import { getRuleSet, getWorkflow, insertExecution } from "./db";
 import type { Env } from "./db";
 
 export async function executeWorkflow(env: Env, workflowDef: any, input: any) {
@@ -34,6 +34,14 @@ export async function executeWorkflow(env: Env, workflowDef: any, input: any) {
           status = "FAILED";
           break;
         }
+      } else if (stepType === "NEXT_WORKFLOW") {
+        const nextWf = await getWorkflow(env, currentStep.nextWorkflowId);
+        executionLog.push({ stepId, type: "NEXT_WORKFLOW", triggered: nextWf.name });
+
+        // recursively execute next workflow
+        const result = await executeWorkflow(env, nextWf, input);
+        executionLog.push({ stepId, chainedResult: result.status });
+        currentStep = findStepById(workflowDef, currentStep.onSuccess);
       } else if (stepType === "END") {
         status = "COMPLETED";
         break;

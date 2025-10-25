@@ -1,5 +1,5 @@
-name = "bpm-rules-worker"
-main = "src/index.ts"
+name = "bpm-rule-api"
+main = "src/worker.ts"
 compatibility_date = "2025-10-25"
 
 [vars]
@@ -15,6 +15,9 @@ database_name = "bpm_rule_db"
 database_id = "bpm-rule-db-local"
 
 [[workflows]]
-name = "bpm-process"
-binding = "BPM_PROCESS"
-class_name = "BPMWorkflow"
+name = "bpmOrchestrator"
+script = ".cloudflare/workflows/bpmOrchestrator.js"
+
+[[services]]
+binding = "BPM_API"
+service = "bpm-rule-api"
