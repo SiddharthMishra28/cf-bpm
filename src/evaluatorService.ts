@@ -1,14 +1,14 @@
 // src/evaluatorService.ts
 import { getCachedRuleset, putCachedRuleset, getEvalCache, putEvalCache } from "./cache";
-import { getRuleSet, insertAuditLog } from "./db";
+import { getRuleSetByVersion, insertAuditLog } from "./db";
 import { evaluateRuleset } from "./ruleEngine";
 
-export async function evaluateWithCache(env: any, ruleSetId: number, payload: any) {
-  const cacheKeySuffix = `${ruleSetId}:${hashPayload(payload)}`; // small fingerprint
+export async function evaluateWithCache(env: any, ruleSetName: string, ruleSetVersion: number, payload: any) {
+  const cacheKeySuffix = `${ruleSetName}:${ruleSetVersion}:${hashPayload(payload)}`; // small fingerprint
   const cachedEval = await getEvalCache(env, cacheKeySuffix);
   if (cachedEval) {
     await insertAuditLog(env, {
-      ruleset_id: ruleSetId,
+      ruleset_id: null,
       short_hash: cacheKeySuffix,
       payload_snippet: JSON.stringify(payload).slice(0, 500),
       result_snippet: JSON.stringify(cachedEval).slice(0, 500)
@@ -17,19 +17,19 @@ export async function evaluateWithCache(env: any, ruleSetId: number, payload: an
   }
 
   // load compiled ruleset from KV or D1
-  let compiled = await getCachedRuleset(env, String(ruleSetId));
+  let compiled = await getCachedRuleset(env, `${ruleSetName}:${ruleSetVersion}`);
   if (!compiled) {
-    const rs = await getRuleSet(env, ruleSetId);
+    const rs = await getRuleSetByVersion(env, ruleSetName, ruleSetVersion);
     if (!rs) throw new Error("ruleset_not_found");
     compiled = rs.rule_json;
-    await putCachedRuleset(env, String(ruleSetId), compiled);
+    await putCachedRuleset(env, `${ruleSetName}:${ruleSetVersion}`, compiled);
   }
 
-  const result = evaluateRuleset(payload, compiled);
+  const result = evaluateRuleset(JSON.parse(compiled), payload);
   // cache evaluation result for short time
   await putEvalCache(env, cacheKeySuffix, result, 60); // 60s
   await insertAuditLog(env, {
-    ruleset_id: ruleSetId,
+    ruleset_id: null,
     short_hash: cacheKeySuffix,
     payload_snippet: JSON.stringify(payload).slice(0, 500),
     result_snippet: JSON.stringify(result).slice(0, 500)

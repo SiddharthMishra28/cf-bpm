@@ -1,24 +1,96 @@
-// Cloudflare Workflow - bpmOrchestrator
+// .cloudflare/workflows/bpmOrchestrator.js
 export async function onRequest(context) {
-  const { env, request } = context;
-  const data = await request.json();
-  const workflowId = data.workflowId;
-  const input = data.input || {};
+  // This function acts as a simple trigger wrapper for the Workflows runtime.
+  // The actual Workflows definition (visual editor) should implement the orchestration
+  // Steps here simulate the orchestration logic:
+  const { request, env, waitUntil } = context;
+  const body = await request.json();
+  const executionId = body.executionId;
 
-  const getWorkflowRes = await env.BPM_API.fetch(new Request(`https://bpm-rule-api/api/workflow/${workflowId}`));
-  const workflow = await getWorkflowRes.json();
+  // Step 1: fetch execution metadata from your Worker (which reads D1)
+  const execRes = await env.BPM_API.fetch(new Request(`https://bpm-rule-api/internal/execution/${executionId}`));
+  const exec = await execRes.json();
 
-  const workflowRes = await env.BPM_API.fetch(
-    new Request(`https://bpm-rule-api/api/workflow/execute`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        workflow,
-        input
-      })
-    })
-  );
+  // Step 2: fetch the workflow snapshot (versioned) from D1 via the Worker
+  const wfRes = await env.BPM_API.fetch(new Request(`https://bpm-rule-api/internal/workflow/${exec.workflow_id}?version=${exec.workflow_version}`));
+  const workflow = await wfRes.json();
 
-  const result = await workflowRes.json();
-  return new Response(JSON.stringify(result), { status: 200 });
+  // Step 3: iterate steps in workflow.steps starting from exec.current_step_id or from first
+  let nextIndex = 0;
+  if (exec.current_step_id) {
+    nextIndex = workflow.steps.findIndex(s => s.id === exec.current_step_id) + 1;
+  }
+
+  for (let i = nextIndex; i < workflow.steps.length; i++) {
+    const step = workflow.steps[i];
+
+    // persist checkpoint: before executing step, set current_step_id
+    await env.BPM_API.fetch(new Request(`https://bpm-rule-api/internal/execution/${executionId}/checkpoint`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ stepId: step.id, checkpoint: { stepIndex: i } })
+    }));
+
+    if (step.type === 'RULE_EVAL') {
+      // call worker to evaluate rules by frozen version
+      const evRes = await env.BPM_API.fetch(new Request(`https://bpm-rule-api/internal/eval`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ruleSetId: step.ruleSetId,
+          ruleSetVersion: exec.rule_set_version,
+          input: exec.input_json
+        })
+      }));
+      const ev = await evRes.json();
+      if (!ev.ok) {
+        // route to onFail or finish as needed
+        if (step.onFail) {
+          // jump to the step id in onFail (resolve index)
+          i = workflow.steps.findIndex(s => s.id === step.onFail) - 1;
+          continue;
+        } else {
+          // finalize failed
+          await env.BPM_API.fetch(new Request(`https://bpm-rule-api/internal/execution/${executionId}/finalize`, { method: 'POST', body: JSON.stringify({ result: ev, status: 'FAILED' }) }));
+          return new Response(JSON.stringify({ status: 'FAILED' }));
+        }
+      }
+      // if ok, continue; optionally persist per-step result
+    } else if (step.type === 'CALL_API') {
+      // perform call, handle retries, backoff
+      const callRes = await fetch(step.url, { method: step.method || 'POST', body: JSON.stringify(step.bodyTemplate || {}) });
+      if (!callRes.ok) {
+        // decide retry or fail; here we fail
+        await env.BPM_API.fetch(new Request(`https://bpm-rule-api/internal/execution/${executionId}/finalize`, { method: 'POST', body: JSON.stringify({ result: { error: 'downstream_failed' }, status: 'FAILED' }) }));
+        return new Response(JSON.stringify({ status: 'FAILED' }));
+      }
+    } else if (step.type === 'WAIT_FOR_EVENT') {
+      // this is the human-in-the-loop step
+      // persist checkpoint (already done), then wait for external event
+      // Cloudflare Workflows allows wait/sleep; better to exit here and let external event trigger resume
+      await env.BPM_API.fetch(new Request(`https://bpm-rule-api/internal/execution/${executionId}/checkpoint`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stepId: step.id, checkpoint: { waitingFor: step.eventName } })
+      }));
+      // instruct to stop orchestration and let external event resume (or wait using built-in workflow 'wait for event')
+      return new Response(JSON.stringify({ status: 'WAITING', step: step.id }));
+    } else if (step.type === 'END') {
+      await env.BPM_API.fetch(new Request(`https://bpm-rule-api/internal/execution/${executionId}/finalize`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ result: { message: 'completed' }, status: 'COMPLETED' })
+      }));
+      return new Response(JSON.stringify({ status: 'COMPLETED' }));
+    }
+  }
+
+  // If loop finishes
+  await env.BPM_API.fetch(new Request(`https://bpm-rule-api/internal/execution/${executionId}/finalize`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ result: { message: 'completed' }, status: 'COMPLETED' })
+  }));
+
+  return new Response(JSON.stringify({ status: 'COMPLETED' }));
 }

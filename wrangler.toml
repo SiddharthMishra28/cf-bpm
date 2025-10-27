@@ -20,8 +20,7 @@ database_id = "bpm-rule-db-local"
 
 [[workflows]]
 name = "bpmOrchestrator"
-binding = "BPM_ORCHESTRATOR"
-class_name = "BPMOrchestrator"
+script = ".cloudflare/workflows/bpmOrchestrator.js"
 
 [[services]]
 binding = "BPM_API"
