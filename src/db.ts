@@ -1,43 +1,122 @@
 export interface Env {
   DB: D1Database;
+  API_CACHE: KVNamespace;
 }
 
-export async function insertRuleSet(env: Env, name: string, description: string, ruleJson: object) {
-  const stmt = env.DB.prepare(
-    `INSERT INTO rule_sets (name, description, rule_json) VALUES (?1, ?2, ?3)`
-  );
-  await stmt.bind(name, description, JSON.stringify(ruleJson)).run();
-}
+// Create or update rule set
+export async function createOrUpdateRuleSet(env: Env, name: string, description: string, ruleJson: object) {
+  const existing = await env.DB.prepare(
+    "SELECT * FROM rule_sets WHERE name = ?1 ORDER BY version_number DESC LIMIT 1"
+  ).bind(name).first();
 
-export async function getRuleSet(env: Env, id: number) {
-  const stmt = env.DB.prepare(`SELECT * FROM rule_sets WHERE id = ?1`);
-  const res = await stmt.bind(id).first();
-  if (res && res.rule_json) {
-    res.rule_json = JSON.parse(res.rule_json);
+  const nextVersion = existing ? existing.version_number + 1 : 1;
+
+  await env.DB.prepare(
+    `INSERT INTO rule_sets (name, description, rule_json, version_number, status)
+     VALUES (?1, ?2, ?3, ?4, 'active')`
+  ).bind(name, description, JSON.stringify(ruleJson), nextVersion).run();
+
+  if (existing) {
+    await env.DB.prepare(
+      "UPDATE rule_sets SET status='deprecated' WHERE name=?1 AND version_number<?2"
+    ).bind(name, nextVersion).run();
   }
-  return res;
+
+  // Cache the latest version to reduce D1 reads
+  await env.API_CACHE.put(`rule-latest-${name}`, JSON.stringify({ version: nextVersion, ruleJson }));
+
+  return nextVersion;
 }
 
-export async function listRuleSets(env: Env) {
-  const stmt = env.DB.prepare(`SELECT id, name, description, created_at FROM rule_sets`);
-  const res = await stmt.all();
-  return res.results || [];
+// Get latest active rule set
+export async function getLatestRuleSet(env: Env, name: string) {
+  const cached = await env.API_CACHE.get(`rule-latest-${name}`, "json");
+  if (cached) return cached;
+
+  const rs = await env.DB.prepare(
+    "SELECT * FROM rule_sets WHERE name=?1 AND status='active' ORDER BY version_number DESC LIMIT 1"
+  ).bind(name).first();
+
+  if (rs) {
+    await env.API_CACHE.put(`rule-latest-${name}`, JSON.stringify(rs));
+  }
+
+  return rs;
 }
+
+// Get specific version
+export async function getRuleSetByVersion(env: Env, name: string, version: number) {
+  return await env.DB.prepare(
+    "SELECT * FROM rule_sets WHERE name=?1 AND version_number=?2"
+  ).bind(name, version).first();
+}
+
+// Create or update workflow
+export async function createOrUpdateWorkflow(env: Env, name: string, description: string, stepsJson: any) {
+  const existing = await env.DB.prepare(
+    "SELECT * FROM workflows WHERE name = ?1 ORDER BY version_number DESC LIMIT 1"
+  ).bind(name).first();
+
+  const nextVersion = existing ? existing.version_number + 1 : 1;
+
+  await env.DB.prepare(
+    `INSERT INTO workflows (name, description, steps_json, version_number, status)
+     VALUES (?1, ?2, ?3, ?4, 'active')`
+  ).bind(name, description, JSON.stringify(stepsJson), nextVersion).run();
+
+  if (existing) {
+    await env.DB.prepare(
+      "UPDATE workflows SET status='deprecated' WHERE name=?1 AND version_number<?2"
+    ).bind(name, nextVersion).run();
+  }
+
+  await env.API_CACHE.put(`workflow-latest-${name}`, JSON.stringify({ version: nextVersion, stepsJson }));
+
+  return nextVersion;
+}
+
+// Get latest active workflow
+export async function getLatestWorkflow(env: Env, name: string) {
+  const cached = await env.API_CACHE.get(`workflow-latest-${name}`, "json");
+  if (cached) return cached;
+
+  const wf = await env.DB.prepare(
+    "SELECT * FROM workflows WHERE name=?1 AND status='active' ORDER BY version_number DESC LIMIT 1"
+  ).bind(name).first();
+
+  if (wf) {
+    await env.API_CACHE.put(`workflow-latest-${name}`, JSON.stringify(wf));
+  }
+
+  return wf;
+}
+
+// Get specific version of a workflow
+export async function getWorkflowByVersion(env: Env, name: string, version: number) {
+  return await env.DB.prepare(
+    "SELECT * FROM workflows WHERE name=?1 AND version_number=?2"
+  ).bind(name, version).first();
+}
+
 
 export async function insertExecution(env: Env, data: {
   workflow_id?: number;
   rule_set_id?: number;
+  rule_set_version?: number;
+  workflow_version?: number;
   input_json: any;
   result_json: any;
   status: string;
 }) {
   const stmt = env.DB.prepare(`
-    INSERT INTO executions (workflow_id, rule_set_id, input_json, result_json, status)
-    VALUES (?1, ?2, ?3, ?4, ?5)
+    INSERT INTO executions (workflow_id, rule_set_id, rule_set_version, workflow_version, input_json, result_json, status)
+    VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
   `);
   await stmt.bind(
     data.workflow_id || null,
     data.rule_set_id || null,
+    data.rule_set_version || null,
+    data.workflow_version || null,
     JSON.stringify(data.input_json),
     JSON.stringify(data.result_json),
     data.status
@@ -46,26 +125,6 @@ export async function insertExecution(env: Env, data: {
 
 export async function listExecutions(env: Env) {
   const stmt = env.DB.prepare(`SELECT * FROM executions ORDER BY created_at DESC LIMIT 50`);
-  const res = await stmt.all();
-  return res.results || [];
-}
-
-export async function insertWorkflow(env: Env, name: string, description: string, stepsJson: any) {
-  const stmt = env.DB.prepare(
-    `INSERT INTO workflows (name, description, steps_json) VALUES (?1, ?2, ?3)`
-  );
-  await stmt.bind(name, description, JSON.stringify(stepsJson)).run();
-}
-
-export async function getWorkflow(env: Env, id: number) {
-  const stmt = env.DB.prepare(`SELECT * FROM workflows WHERE id = ?1`);
-  const wf = await stmt.bind(id).first();
-  if (wf && wf.steps_json) wf.steps_json = JSON.parse(wf.steps_json);
-  return wf;
-}
-
-export async function listWorkflows(env: Env) {
-  const stmt = env.DB.prepare(`SELECT id, name, description, created_at FROM workflows`);
   const res = await stmt.all();
   return res.results || [];
 }

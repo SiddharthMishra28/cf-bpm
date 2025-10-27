@@ -1,7 +1,5 @@
-import { executeWorkflow } from "./workflowExecutor";
-import { listRuleSets, listExecutions, insertWorkflow, getWorkflow, listWorkflows, createApiKey } from "./db";
-import { evaluateWithCache } from "./evaluatorService";
-import { createOrUpdateRuleSet } from "./rulesController";
+import { startWorkflowExecution } from "./workflowExecutor";
+import { createOrUpdateRuleSet, getLatestRuleSet, getRuleSetByVersion, createOrUpdateWorkflow, getLatestWorkflow, getWorkflowByVersion, listExecutions, createApiKey } from "./db";
 import { requireApiKey } from "./auth";
 import { checkRateLimit } from "./rateLimiter";
 import { createKeyHash } from "./securityUtils";
@@ -14,19 +12,7 @@ export default {
     const method = req.method;
 
     try {
-      // Public endpoints (or protected with a less restrictive key)
-      if (path === "/api/evaluate" && method === "POST") {
-        const auth = await requireApiKey(req, env, ["developer", "admin"]);
-        if (!auth.ok) return new Response(JSON.stringify(auth.body), { status: auth.status });
-
-        const rl = await checkRateLimit(env, `apiKey:${auth.key.id}`, 60, 120);
-        if (!rl.allowed) return new Response(JSON.stringify({ error: "rate_limited" }), { status: 429 });
-
-        const body = await req.json();
-        const result = await evaluateWithCache(env, body.ruleSetId, body.input);
-        return Response.json(result);
-      }
-
+      // Workflow Execution
       if (path === "/api/workflow/execute" && method === "POST") {
         const auth = await requireApiKey(req, env, ["developer", "admin"]);
         if (!auth.ok) return new Response(JSON.stringify(auth.body), { status: auth.status });
@@ -35,62 +21,91 @@ export default {
         if (!rl.allowed) return new Response(JSON.stringify({ error: "rate_limited" }), { status: 429 });
 
         const body = await req.json();
-        const workflowDef = body.workflow; // JSON structure or retrieved from DB
-        const result = await executeWorkflow(env, workflowDef, body.input);
+        const result = await startWorkflowExecution(env, body.workflowName, body.input);
         return Response.json(result);
       }
 
-      // Management endpoints (protected with "admin" or "developer" roles)
-      if (path === "/api/rules" && method === "GET") {
-        const auth = await requireApiKey(req, env, ["readonly", "developer", "admin"]);
-        if (!auth.ok) return new Response(JSON.stringify(auth.body), { status: auth.status });
-
-        const list = await listRuleSets(env);
-        return Response.json(list);
-      }
-
-      if (path.startsWith("/api/rules") && (method === "POST" || method === "PUT")) {
+      // Rule Set Management
+      if (path === "/api/rule-set" && method === "POST") {
         const auth = await requireApiKey(req, env, ["developer", "admin"]);
         if (!auth.ok) return new Response(JSON.stringify(auth.body), { status: auth.status });
 
-        const rl = await checkRateLimit(env, `apiKey:${auth.key.id}`, 60, 60);
-        if (!rl.allowed) return new Response(JSON.stringify({ error: "rate_limited" }), { status: 429 });
-
-        const body = await req.json();
-        const id = path.split("/").pop();
-        const result = await createOrUpdateRuleSet(env, id ? Number(id) : null, body.name, body.description || "", body.rule_json);
-        return Response.json(result);
+        const { name, description, ruleJson } = await req.json();
+        const version = await createOrUpdateRuleSet(env, name, description, ruleJson);
+        return Response.json({ message: "Rule set updated", version });
       }
 
-      if (path === "/api/workflows" && method === "POST") {
+      if (path === "/api/rule-set/latest" && method === "GET") {
+        const auth = await requireApiKey(req, env, ["readonly", "developer", "admin"]);
+        if (!auth.ok) return new Response(JSON.stringify(auth.body), { status: auth.status });
+
+        const name = url.searchParams.get("name");
+        const rs = await getLatestRuleSet(env, name);
+        return Response.json(rs || { error: "Not found" });
+      }
+
+      if (path === "/api/rule-set/version" && method === "GET") {
+        const auth = await requireApiKey(req, env, ["readonly", "developer", "admin"]);
+        if (!auth.ok) return new Response(JSON.stringify(auth.body), { status: auth.status });
+
+        const name = url.searchParams.get("name");
+        const version = parseInt(url.searchParams.get("version") || "1", 10);
+        const rs = await getRuleSetByVersion(env, name, version);
+        return Response.json(rs || { error: "Not found" });
+      }
+
+      if (path === "/api/rule-set/versions" && method === "GET") {
+        const auth = await requireApiKey(req, env, ["readonly", "developer", "admin"]);
+        if (!auth.ok) return new Response(JSON.stringify(auth.body), { status: auth.status });
+
+        const name = url.searchParams.get("name");
+        const res = await env.DB.prepare(
+          "SELECT version_number, status, created_at FROM rule_sets WHERE name=?1 ORDER BY version_number DESC"
+        ).bind(name).all();
+        return Response.json(res.results || []);
+      }
+
+      // Workflow Management
+      if (path === "/api/workflow" && method === "POST") {
         const auth = await requireApiKey(req, env, ["developer", "admin"]);
         if (!auth.ok) return new Response(JSON.stringify(auth.body), { status: auth.status });
 
-        const rl = await checkRateLimit(env, `apiKey:${auth.key.id}`, 60, 30);
-        if (!rl.allowed) return new Response(JSON.stringify({ error: "rate_limited" }), { status: 429 });
-
-        const body = await req.json();
-        await insertWorkflow(env, body.name, body.description || "", body.steps);
-        return Response.json({ ok: true, message: "Workflow saved" });
+        const { name, description, stepsJson } = await req.json();
+        const version = await createOrUpdateWorkflow(env, name, description, stepsJson);
+        return Response.json({ message: "Workflow updated", version });
       }
 
-      if (path === "/api/workflows" && method === "GET") {
+      if (path === "/api/workflow/latest" && method === "GET") {
         const auth = await requireApiKey(req, env, ["readonly", "developer", "admin"]);
         if (!auth.ok) return new Response(JSON.stringify(auth.body), { status: auth.status });
 
-        const list = await listWorkflows(env);
-        return Response.json(list);
+        const name = url.searchParams.get("name");
+        const wf = await getLatestWorkflow(env, name);
+        return Response.json(wf || { error: "Not found" });
       }
 
-      if (path.startsWith("/api/workflow/") && method === "GET" && path.split("/").length > 3) {
+      if (path === "/api/workflow/version" && method === "GET") {
         const auth = await requireApiKey(req, env, ["readonly", "developer", "admin"]);
         if (!auth.ok) return new Response(JSON.stringify(auth.body), { status: auth.status });
 
-        const id = Number(path.split("/").pop());
-        const wf = await getWorkflow(env, id);
-        return Response.json(wf || {});
+        const name = url.searchParams.get("name");
+        const version = parseInt(url.searchParams.get("version") || "1", 10);
+        const wf = await getWorkflowByVersion(env, name, version);
+        return Response.json(wf || { error: "Not found" });
       }
 
+      if (path === "/api/workflow/versions" && method === "GET") {
+        const auth = await requireApiKey(req, env, ["readonly", "developer", "admin"]);
+        if (!auth.ok) return new Response(JSON.stringify(auth.body), { status: auth.status });
+
+        const name = url.searchParams.get("name");
+        const res = await env.DB.prepare(
+          "SELECT version_number, status, created_at FROM workflows WHERE name=?1 ORDER BY version_number DESC"
+        ).bind(name).all();
+        return Response.json(res.results || []);
+      }
+
+      // Other existing endpoints...
       if (path === "/api/executions" && method === "GET") {
         const auth = await requireApiKey(req, env, ["admin"]);
         if (!auth.ok) return new Response(JSON.stringify(auth.body), { status: auth.status });
@@ -99,7 +114,6 @@ export default {
         return Response.json(list);
       }
 
-      // API Key management (highly protected)
       if (path === "/api/keys" && method === "POST") {
         const auth = await requireApiKey(req, env, ["admin"]);
         if (!auth.ok) return new Response(JSON.stringify(auth.body), { status: auth.status });

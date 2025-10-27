@@ -9,6 +9,10 @@ ENV = "dev"
 binding = "RULES_CACHE"
 id = "kv_namespace_id_placeholder"
 
+[[kv_namespaces]]
+binding = "API_CACHE"
+id = "bpm-cache"
+
 [[d1_databases]]
 binding = "DB"
 database_name = "bpm_rule_db"
@@ -16,7 +20,8 @@ database_id = "bpm-rule-db-local"
 
 [[workflows]]
 name = "bpmOrchestrator"
-script = ".cloudflare/workflows/bpmOrchestrator.js"
+binding = "BPM_ORCHESTRATOR"
+class_name = "BPMOrchestrator"
 
 [[services]]
 binding = "BPM_API"
