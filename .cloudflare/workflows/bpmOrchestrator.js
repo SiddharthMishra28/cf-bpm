@@ -8,11 +8,11 @@ export async function onRequest(context) {
   const executionId = body.executionId;
 
   // Step 1: fetch execution metadata from your Worker (which reads D1)
-  const execRes = await env.BPM_API.fetch(new Request(`https://bpm-rule-api/internal/execution/${executionId}`));
+  const execRes = await env.BPM_API.fetch(new Request(`/internal/execution/${executionId}`));
   const exec = await execRes.json();
 
   // Step 2: fetch the workflow snapshot (versioned) from D1 via the Worker
-  const wfRes = await env.BPM_API.fetch(new Request(`https://bpm-rule-api/internal/workflow/${exec.workflow_id}?version=${exec.workflow_version}`));
+  const wfRes = await env.BPM_API.fetch(new Request(`/internal/workflow/${exec.workflow_id}?version=${exec.workflow_version}`));
   const workflow = await wfRes.json();
 
   // Step 3: iterate steps in workflow.steps starting from exec.current_step_id or from first
@@ -25,7 +25,7 @@ export async function onRequest(context) {
     const step = workflow.steps[i];
 
     // persist checkpoint: before executing step, set current_step_id
-    await env.BPM_API.fetch(new Request(`https://bpm-rule-api/internal/execution/${executionId}/checkpoint`, {
+    await env.BPM_API.fetch(new Request(`/internal/execution/${executionId}/checkpoint`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ stepId: step.id, checkpoint: { stepIndex: i } })
@@ -33,7 +33,7 @@ export async function onRequest(context) {
 
     if (step.type === 'RULE_EVAL') {
       // call worker to evaluate rules by frozen version
-      const evRes = await env.BPM_API.fetch(new Request(`https://bpm-rule-api/internal/eval`, {
+      const evRes = await env.BPM_API.fetch(new Request(`/internal/eval`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -51,7 +51,7 @@ export async function onRequest(context) {
           continue;
         } else {
           // finalize failed
-          await env.BPM_API.fetch(new Request(`https://bpm-rule-api/internal/execution/${executionId}/finalize`, { method: 'POST', body: JSON.stringify({ result: ev, status: 'FAILED' }) }));
+          await env.BPM_API.fetch(new Request(`/internal/execution/${executionId}/finalize`, { method: 'POST', body: JSON.stringify({ result: ev, status: 'FAILED' }) }));
           return new Response(JSON.stringify({ status: 'FAILED' }));
         }
       }
@@ -61,14 +61,14 @@ export async function onRequest(context) {
       const callRes = await fetch(step.url, { method: step.method || 'POST', body: JSON.stringify(step.bodyTemplate || {}) });
       if (!callRes.ok) {
         // decide retry or fail; here we fail
-        await env.BPM_API.fetch(new Request(`https://bpm-rule-api/internal/execution/${executionId}/finalize`, { method: 'POST', body: JSON.stringify({ result: { error: 'downstream_failed' }, status: 'FAILED' }) }));
+        await env.BPM_API.fetch(new Request(`/internal/execution/${executionId}/finalize`, { method: 'POST', body: JSON.stringify({ result: { error: 'downstream_failed' }, status: 'FAILED' }) }));
         return new Response(JSON.stringify({ status: 'FAILED' }));
       }
     } else if (step.type === 'WAIT_FOR_EVENT') {
       // this is the human-in-the-loop step
       // persist checkpoint (already done), then wait for external event
       // Cloudflare Workflows allows wait/sleep; better to exit here and let external event trigger resume
-      await env.BPM_API.fetch(new Request(`https://bpm-rule-api/internal/execution/${executionId}/checkpoint`, {
+      await env.BPM_API.fetch(new Request(`/internal/execution/${executionId}/checkpoint`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ stepId: step.id, checkpoint: { waitingFor: step.eventName } })
@@ -76,7 +76,7 @@ export async function onRequest(context) {
       // instruct to stop orchestration and let external event resume (or wait using built-in workflow 'wait for event')
       return new Response(JSON.stringify({ status: 'WAITING', step: step.id }));
     } else if (step.type === 'END') {
-      await env.BPM_API.fetch(new Request(`https://bpm-rule-api/internal/execution/${executionId}/finalize`, {
+      await env.BPM_API.fetch(new Request(`/internal/execution/${executionId}/finalize`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ result: { message: 'completed' }, status: 'COMPLETED' })
@@ -86,7 +86,7 @@ export async function onRequest(context) {
   }
 
   // If loop finishes
-  await env.BPM_API.fetch(new Request(`https://bpm-rule-api/internal/execution/${executionId}/finalize`, {
+  await env.BPM_API.fetch(new Request(`/internal/execution/${executionId}/finalize`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ result: { message: 'completed' }, status: 'COMPLETED' })
