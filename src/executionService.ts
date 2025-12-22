@@ -44,14 +44,27 @@ export async function finalizeExecution(env: Env, executionId: number, resultObj
 
 export async function getExecution(env: Env, executionId: number) {
   const stmt = env.DB.prepare(`SELECT * FROM executions WHERE id = ?1`);
-  const row = await stmt.bind(executionId).first();
+  const row = await stmt.bind(executionId).first<any>();
   if (!row) return null;
-  if (row.input_json) row.input_json = JSON.parse(row.input_json);
-  if (row.checkpoint) {
-    try { row.checkpoint = JSON.parse(row.checkpoint); } catch { row.checkpoint = null; }
+
+  const newRow = { ...row };
+
+  if (newRow.input_json && typeof newRow.input_json === 'string') {
+    newRow.input_json = JSON.parse(newRow.input_json);
   }
-  if (row.result_json) {
-    try { row.result_json = JSON.parse(row.result_json); } catch { row.result_json = null; }
+  if (newRow.checkpoint && typeof newRow.checkpoint === 'string') {
+    try {
+      newRow.checkpoint = JSON.parse(newRow.checkpoint);
+    } catch {
+      newRow.checkpoint = null;
+    }
   }
-  return row;
+  if (newRow.result_json && typeof newRow.result_json === 'string') {
+    try {
+      newRow.result_json = JSON.parse(newRow.result_json);
+    } catch {
+      newRow.result_json = null;
+    }
+  }
+  return newRow;
 }

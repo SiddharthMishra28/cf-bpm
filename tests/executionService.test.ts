@@ -29,9 +29,9 @@ const fakeDb = {
           if (exec) {
             if (sql.includes("SET current_step_id")) {
               exec.current_step_id = args[0];
-              exec.checkpoint = JSON.stringify(args[1]);
+              exec.checkpoint = args[1];
             } else if (sql.includes("SET result_json")) {
-              exec.result_json = JSON.stringify(args[0]);
+              exec.result_json = args[0];
               exec.status = args[1];
               exec.checkpoint = null;
             }
@@ -41,7 +41,8 @@ const fakeDb = {
       },
       first: async () => {
         const id = args[0].toString();
-        return fakeDb.store.get(id);
+        const record = fakeDb.store.get(id);
+        return record ? { ...record } : null;
       }
     })
   })

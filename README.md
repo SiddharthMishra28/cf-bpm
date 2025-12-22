@@ -79,6 +79,13 @@ It provides a fully programmable API to define, evaluate, and orchestrate multi-
 ✅ REST API for defining, executing, and monitoring workflows
 ✅ No paid dependencies — runs entirely on Cloudflare free tier
 
+### 📖 API Documentation
+
+This project includes interactive API documentation using Swagger UI.
+Once you've deployed the worker, you can access the documentation at the root URL of your worker (e.g., `https://<your-worker>.workers.dev/`).
+
+The documentation provides a list of all available endpoints, their parameters, and response schemas. You can also use the "Try it out" feature to send requests to the API directly from your browser.
+
 ### 🚀 Setup & Installation
 
 #### 1️⃣ Prerequisites
