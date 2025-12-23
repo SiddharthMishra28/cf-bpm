@@ -18,6 +18,10 @@ binding = "DB"
 database_name = "bpm_rule_db"
 database_id = "d60a51ef-7b78-4eee-b816-828f05b958df"
 
+[[workflows]]
+binding = "BPM_ORCHESTRATOR"
+name = "bpmOrchestrator"
+
 [[services]]
 binding = "BPM_API"
 service = "bpm-rule-api"

@@ -103,40 +103,21 @@ cd cloudflare-bpm-rule-engine
 npm install
 ```
 
-#### 3️⃣ Configure Wrangler
-
-Edit `wrangler.toml`:
-
-```toml
-name = "bpm-rule-api"
-main = "src/worker.ts"
-compatibility_date = "2025-10-25"
-
-[[d1_databases]]
-binding = "DB"
-database_name = "bpm_rule_db"
-database_id = "bpm-rule-db-local"
-
-[[kv_namespaces]]
-binding = "RULES_CACHE"
-id = "kv_namespace_id_here"
-
-[[kv_namespaces]]
-binding = "API_CACHE"
-id = "bpm-cache"
-```
-
-#### 4️⃣ Create database & apply migrations
+#### 3️⃣ Run the interactive setup wizard
 ```bash
-wrangler d1 create bpm_rule_db
-wrangler d1 execute bpm_rule_db --file=./migrations/001_initial.sql
-wrangler d1 execute bpm_rule_db --file=./migrations/002_audit.sql
-wrangler d1 execute bpm_rule_db --file=./migrations/003_security.sql
-wrangler d1 execute bpm_rule_db --file=./migrations/004_versioning.sql
-wrangler d1 execute bpm_rule_db --file=./migrations/005_executions_v2.sql
+npm run setup
 ```
 
-#### 5️⃣ Deploy
+The setup wizard will:
+- Check prerequisites (Wrangler CLI, Node.js)
+- Guide you through Cloudflare authentication
+- Create KV namespaces for caching
+- Create D1 database for persistence
+- Update `wrangler.toml` with resource IDs
+- Run all database migrations
+- Optionally deploy the application
+
+#### 4️⃣ Deploy (if not done during setup)
 ```bash
 wrangler deploy
 ```

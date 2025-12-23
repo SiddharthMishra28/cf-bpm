@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler publish",
-    "test": "vitest run"
+    "test": "vitest run",
+    "setup": "node setup.js"
   },
   "devDependencies": {
     "typescript": "^5.3.3",
