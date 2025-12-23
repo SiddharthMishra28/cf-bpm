@@ -129,6 +129,7 @@ id = "bpm-cache"
 #### 4️⃣ Create database & apply migrations
 ```bash
 wrangler d1 create bpm_rule_db
+wrangler d1 execute bpm_rule_db --file=./migrations/001_initial.sql
 wrangler d1 execute bpm_rule_db --file=./migrations/002_audit.sql
 wrangler d1 execute bpm_rule_db --file=./migrations/003_security.sql
 wrangler d1 execute bpm_rule_db --file=./migrations/004_versioning.sql

@@ -16,11 +16,7 @@ id = "bpm-cache"
 [[d1_databases]]
 binding = "DB"
 database_name = "bpm_rule_db"
-database_id = "bpm-rule-db-local"
-
-[[workflows]]
-name = "bpmOrchestrator"
-script = ".cloudflare/workflows/bpmOrchestrator.js"
+database_id = "d60a51ef-7b78-4eee-b816-828f05b958df"
 
 [[services]]
 binding = "BPM_API"
