@@ -81,10 +81,21 @@ It provides a fully programmable API to define, evaluate, and orchestrate multi-
 
 ### 📖 API Documentation
 
-This project includes interactive API documentation using Swagger UI.
-Once you've deployed the worker, you can access the documentation at the root URL of your worker (e.g., `https://<your-worker>.workers.dev/`).
+This project includes comprehensive interactive API documentation using Swagger UI.
+Once your worker is running (locally with `npm run dev` or deployed), you can access the documentation at the root URL:
 
-The documentation provides a list of all available endpoints, their parameters, and response schemas. You can also use the "Try it out" feature to send requests to the API directly from your browser.
+- **Local development**: `http://127.0.0.1:8787/`
+- **Production**: `https://<your-worker>.workers.dev/`
+
+The Swagger UI provides:
+- Complete endpoint documentation with parameters and response schemas
+- Interactive "Try it out" feature to test API calls directly from your browser
+- Authentication headers for API key usage
+- Example request/response payloads
+
+**Alternative formats:**
+- OpenAPI JSON spec: `https://<your-worker>.workers.dev/openapi.json`
+- ReDoc format: `https://<your-worker>.workers.dev/redoc`
 
 ### 🚀 Setup & Installation
 

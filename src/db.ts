@@ -1,3 +1,5 @@
+/// <reference types="@cloudflare/workers-types" />
+
 export interface Env {
   DB: D1Database;
   API_CACHE: KVNamespace;
@@ -96,6 +98,20 @@ export async function getWorkflowByVersion(env: Env, name: string, version: numb
   return await env.DB.prepare(
     "SELECT * FROM workflows WHERE name=?1 AND version_number=?2"
   ).bind(name, version).first();
+}
+
+// Get workflow by ID
+export async function getWorkflow(env: Env, id: number) {
+  return await env.DB.prepare(
+    "SELECT * FROM workflows WHERE id=?1"
+  ).bind(id).first();
+}
+
+// Get rule set by ID
+export async function getRuleSet(env: Env, id: number) {
+  return await env.DB.prepare(
+    "SELECT * FROM rule_sets WHERE id=?1"
+  ).bind(id).first();
 }
 
 
