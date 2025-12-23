@@ -56,7 +56,7 @@ async function main() {
   console.log('\n📋 Step 2: Cloudflare Authentication');
   const authChoice = await ask('Do you need to login to Cloudflare? (y/n): ');
   if (authChoice.toLowerCase() === 'y' || authChoice.toLowerCase() === 'yes') {
-    runCommand('wrangler auth login', 'Logging into Cloudflare');
+    runCommand('wrangler login', 'Logging into Cloudflare');
   } else {
     console.log('⏭️  Skipping authentication (assuming already logged in).');
   }
